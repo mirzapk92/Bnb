@@ -1,45 +1,29 @@
-name: CI
+name: Windows RDP Access
 
-
-on: [push, workflow_dispatch]
-
+on:  
+  workflow_dispatch  # دستی طور پر رن کرنے کے لیے
 
 jobs:
-
-  build:
-
-
-    runs-on: windows-latest
-
-
+  rdp_access:
+    runs-on: windows-latest  # Windows GitHub Runner
     steps:
+      - name: Start RDP
+        run: |
+          net user github TempPass123 /add
+          net localgroup administrators github /add
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+          reg add "HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f
+          netsh advfirewall firewall set rule group="remote desktop" new enable=Yes
+          net start termservice
 
-name: Download
+      - name: Install Ngrok
+        run: |
+          Invoke-WebRequest -Uri https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-windows-amd64.zip -OutFile ngrok.zip
+          tar -xf ngrok.zip
+          .\ngrok.exe authtoken YOUR_NGROK_AUTH_TOKEN
+          Start-Process -NoNewWindow -FilePath .\ngrok.exe -ArgumentList "tcp 3389"
 
-      run: Invoke-WebRequest https://bin.equinox.io...​ -OutFile ngrok.zip
-
-name: Extract
-
-      run: Expand-Archive ngrok.zip
-
-name: Auth
-
-      run: .\ngrok\ngrok.exe authtoken $Env:NGROK_AUTH_TOKEN
-
-      env:
-
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
-
-name: Enable TS
-
-      run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server'-name "fDenyTSConnections" -Value 0
-
-run: Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-
-run: Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-
-run: Set-LocalUser -Name "runneradmin" -Password (ConvertTo-SecureString -AsPlainText "P@ssw0rd!" -Force)
-
-name: Create Tunnel
-
-      run: .\ngrok\ngrok.exe tcp 3389
+      - name: Display RDP Connection Info
+        run: |
+          $ngrok_url = (Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels").tunnels.public_url
+          Write-Output "RDP Address: $ngrok_url"
